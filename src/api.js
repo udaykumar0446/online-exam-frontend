@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const BASE = (import.meta.env.VITE_API_URL || 'https://online-exam-backend-ll6f.onrender.com/api').replace(/\/$/, '');
 
 export const session = {
   get: () => JSON.parse(localStorage.getItem('session') || 'null'),
@@ -8,14 +8,34 @@ export const session = {
 
 export async function api(path, method = 'GET', body) {
   const s = session.get();
-  const res = await fetch(BASE + path, {
+
+  const res = await fetch(BASE + (path.startsWith('/') ? path : '/' + path), {
     method,
-    headers: { 'Content-Type': 'application/json', ...(s ? { Authorization: 'Bearer ' + s.token } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(s ? { Authorization: 'Bearer ' + s.token } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 401 && s) { session.clear(); window.location.href = '/'; }
+
+  if (res.status === 401 && s) {
+    session.clear();
+    window.location.href = '/';
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error((data && data.message) || 'Something went wrong. Please try again.');
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { message: text };
+  }
+
+  if (!res.ok) {
+    throw new Error((data && data.message) || `Request failed (${res.status})`);
+  }
+
   return data;
 }
